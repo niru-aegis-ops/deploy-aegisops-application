@@ -1,0 +1,127 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - "main"
+  pull_request:
+    branches:
+      - "main"
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # Needed to push to GitHub Container Registry (GHCR)
+
+    outputs:
+      # Output the specific SHA-based image tag for the deploy job to ensure deterministic deployments
+      image_tag_sha: ${{ steps.meta.outputs.tags-sha }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3.6.0 # Pinned to specific minor version for stability
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v2.1.0 # Pinned to specific minor version for stability
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v4.6.0 # Pinned to specific minor version for stability
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/aegisops-app # Refined image name for clarity
+          tags:
+            # Removed 'latest' tag for main branch pushes to avoid ambiguity in production environments.
+            # Only immutable SHA tags are pushed for deterministic deployments.
+            - type=sha,format=long # Immutable SHA tag for deterministic deployments and easier rollbacks
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4.1.1 # Pinned to specific minor version for stability
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build-and-push # This job depends on the successful completion of the build-and-push job
+    environment: production # Specifies the deployment environment
+    # Permissions required for deploying to Kubernetes, especially if using OIDC with cloud providers
+    permissions:
+      id-token: write # Required for OIDC authentication with cloud providers (e.g., AWS EKS, GCP GKE, Azure AKS)
+      contents: read # Required for the checkout action
+
+    env: # Define environment variables for the entire job
+      IMAGE_FULL_TAG: ghcr.io/${{ github.repository_owner }}/aegisops-app:${{ needs.build-and-push.outputs.image_tag_sha }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3.6.0 # Pinned to specific minor version for stability
+
+      - name: Set up Kubeconfig
+        # This step uses a secret for Kubeconfig. For robust production environments,
+        # consider using OIDC with cloud provider actions (e.g., aws-actions/configure-aws-credentials,
+        # google-github-actions/auth, azure/login) to authenticate and obtain temporary credentials,
+        # avoiding the need to store long-lived Kubeconfig secrets.
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
+          chmod 600 ~/.kube/config
+        # Ensure the KUBECONFIG secret is securely stored in your repository or organization settings.
+
+      - name: Deploy to Kubernetes
+        # This step assumes your Kubernetes manifests are located in a 'kubernetes/' directory
+        # and define a Deployment named 'aegisops-deployment' with a container named 'aegisops-container'.
+        # For more advanced environment-specific configurations (e.g., resource limits, replica counts, ingress rules),
+        # consider using templating tools like Helm charts or Kustomize overlays.
+        run: |
+          echo "Attempting to deploy image: ${{ env.IMAGE_FULL_TAG }}"
+
+          # Apply base Kubernetes manifests. This will create new resources or update existing ones.
+          # It's assumed that 'kubernetes/deployment.yaml' defines 'aegisops-deployment'
+          # and a container within it (e.g., 'aegisops-container').
+          kubectl apply -f kubernetes/
+
+          # Update the image tag for the specific deployment and container.
+          # This ensures the deployed application uses the exact, immutable image built in the previous step.
+          # Replace 'aegisops-deployment' with your actual Deployment name and 'aegisops-container'
+          # with the actual container name within that deployment.
+          kubectl set image deployment/aegisops-deployment aegisops-container="${{ env.IMAGE_FULL_TAG }}" -n default
+          
+          echo "Deployment initiated for aegisops-deployment with image: ${{ env.IMAGE_FULL_TAG }}"
+
+      - name: Rollout status
+        # Wait for the Kubernetes deployment to complete and check its status.
+        # This ensures the new version is healthy before the job finishes.
+        run: kubectl rollout status deployment/aegisops-deployment -n default
+
+      - name: Post-Deployment Verification
+        # Add more specific health checks or integration tests here to confirm the application is running and accessible.
+        run: |
+          echo "Basic deployment verification completed. Consider adding more specific health checks or integration tests."
+          # Example: kubectl get pods -l app=aegisops-app -n default
+          # Example: curl -sSf http://your-service-url/health || exit 1
+
+      - name: Deployment Notification
+        if: success()
+        run: |
+          echo "Deployment to production environment completed successfully for aegisops-app. Image: ${{ env.IMAGE_FULL_TAG }}"
+          # Integrate with external notification services here (e.g., Slack, Microsoft Teams, Email)
+          # Example using a placeholder for a Slack Action:
+          # - uses: rtCamp/action-slack-notify@v2.2.0
+          #   env:
+          #     SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }}
+          #     SLACK_MESSAGE: "aegisops-app deployed to production successfully! Image: ${{ env.IMAGE_FULL_TAG }}"
+          #     SLACK_COLOR: good
+
+      - name: Rollback Strategy Information
+        if: failure() # Provide rollback information if the deployment fails.
+        run: |
+          echo "Deployment failed. For rollback, consider 'kubectl rollout undo deployment/aegisops-deployment -n default' to revert to the previous stable version."
+          echo "Alternatively, trigger a new workflow run with a specific, known-good SHA tag from GHCR by manually dispatching the workflow."
