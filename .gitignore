@@ -1,0 +1,60 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Virtual environments
+# Standard virtual environment directories
+venv/
+.venv/
+env/
+ENV/
+virtualenv/
+
+# Scoped virtual environment contents to prevent unintentionally ignoring project-specific 'bin', 'lib', 'include'
+venv/bin/
+venv/lib/
+venv/include/
+.venv/bin/
+.venv/lib/
+env/bin/
+env/lib/
+env/include/
+ENV/bin/
+ENV/lib/
+ENV/include/
+virtualenv/bin/
+virtualenv/lib/
+virtualenv/include/
+
+# Packaging and distribution artifacts
+build/
+dist/
+*.egg/
+*.egg-info/
+*.whl
+
+# Editors
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Runtime files, caches, and reports
+.coverage
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+instance/ # Common for Flask/Django development instances
+
+# Databases
+*.sqlite3
+db.sqlite3 # Specific common SQLite database file
+
+# OS generated files
+.DS_Store
+.env # Local environment variables, typically not committed

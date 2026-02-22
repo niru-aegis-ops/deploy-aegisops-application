@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aegisops-deployment
+  labels:
+    app: aegisops
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: aegisops
+  template:
+    metadata:
+      labels:
+        app: aegisops
+    spec:
+      containers:
+      - name: aegisops-app
+        image: ghcr.io/your_github_username/deploy-aegisops-application:latest # Replace with your actual image path
+        ports:
+        - containerPort: 5000
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
