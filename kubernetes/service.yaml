@@ -8,7 +8,7 @@ spec:
   selector:
     app: aegisops
   ports:
-  - protocol: TCP
-    port: 80       # Port exposed by the service (internal to cluster)
-    targetPort: 5000 # Port on the container
-  type: ClusterIP # Use LoadBalancer for external access in cloud environments, or NodePort for testing
+    - protocol: TCP
+      port: 80
+      targetPort: 5000
+  type: LoadBalancer

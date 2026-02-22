@@ -16,27 +16,25 @@ spec:
     spec:
       containers:
       - name: aegisops-app
-        image: ghcr.io/your_github_username/deploy-aegisops-application:latest # Replace with your actual image path
+        image: IMAGE_PLACEHOLDER # This will be replaced by GitHub Actions
         ports:
         - containerPort: 5000
-        resources:
-          requests:
-            memory: "64Mi"
-            cpu: "100m"
-          limits:
-            memory: "128Mi"
-            cpu: "200m"
         livenessProbe:
           httpGet:
             path: /health
             port: 5000
           initialDelaySeconds: 10
           periodSeconds: 5
-          timeoutSeconds: 3
         readinessProbe:
           httpGet:
             path: /health
             port: 5000
           initialDelaySeconds: 5
-          periodSeconds: 5
-          timeoutSeconds: 3
+          periodSeconds: 3
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"

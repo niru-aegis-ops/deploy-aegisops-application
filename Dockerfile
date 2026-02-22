@@ -1,49 +1,49 @@
-# Multi-stage build for a smaller final image
+# Multi-stage Dockerfile for Aegisops application
 
 # --- Builder Stage ---
-FROM python:3.9-slim-buster AS builder
-
-# Create a virtual environment and install dependencies into it
-ENV VIRTUAL_ENV=/opt/venv
-RUN python -m venv $VIRTUAL_ENV
-# Ensure pip and python commands use the virtual environment
-ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+# Pin to a specific patch version for enhanced reproducibility
+FROM python:3.9.18-slim-buster as builder
 
 WORKDIR /app
 
-# Copy requirements and install application dependencies into the venv
+# Install dependencies into a virtual environment
 COPY requirements.txt .
+RUN python -m venv /opt/venv
+# Activate the virtual environment for subsequent commands in this stage
+ENV PATH="/opt/venv/bin:$PATH"
 RUN pip install --no-cache-dir -r requirements.txt
 
-# --- Production Stage ---
-FROM python:3.9-slim-buster
+# --- Runner Stage ---
+# Use the same slim-buster base image. The key benefit of multi-stage here is
+# pre-installing dependencies into a venv and copying only that, avoiding reinstall.
+FROM python:3.9.18-slim-buster
 
-# Create a dedicated non-root user for enhanced security
-RUN useradd --no-log-init --create-home appuser
+# Set working directory
+WORKDIR /app
 
-# Set the working directory for the application
-WORKDIR /home/appuser/app
-
-# Copy the virtual environment from the builder stage
+# Copy the installed virtual environment from the builder stage
 COPY --from=builder /opt/venv /opt/venv
-# Add the virtual environment's bin directory to the PATH for the non-root user
+
+# Activate the virtual environment for the runner stage
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Copy the application code into the working directory
+# Copy application code. Ensure a .dockerignore file is present to exclude unnecessary files.
 COPY . .
 
-# Change ownership of the application directory to the non-root user
-RUN chown -R appuser:appuser /home/appuser/app
-
+# Create a dedicated non-root user for improved security
+RUN adduser --system --no-create-home appuser
+# Grant ownership of the application directory to the non-root user
+RUN chown -R appuser:appuser /app
 # Switch to the non-root user
 USER appuser
 
-# Expose the port the app runs on
+# Expose the application port
 EXPOSE 5000
 
-# Use Gunicorn as the production-ready WSGI server
-# ENTRYPOINT sets the primary command, CMD provides default arguments
-# This allows for easy overriding of Gunicorn arguments while keeping gunicorn as the entrypoint.
-# Assuming your Flask/Django app instance is named 'app' in 'app.py'
-ENTRYPOINT ["gunicorn"]
-CMD ["--bind", "0.0.0.0:5000", "app:app"]
+# Set environment variable for the port
+ENV PORT=5000
+
+# Command to run the application using Gunicorn for production robustness.
+# This assumes 'app.py' contains a WSGI callable named 'app'.
+# Adjust 'app:app' if your application entry point is different (e.g., 'your_module:create_app()').
+CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:5000", "app:app"]
